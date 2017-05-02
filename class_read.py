@@ -100,13 +100,13 @@ class Reference:
         status = False
 
         if "|mut|" in line:  # here we check if its mutant or not
-            pattern2 = r'(\|mut\|[^|]*\|[^|]*)\|(\d*)\|'
+            pattern2 = r'(\|mut\|[^|]*\|[^|]*)\|(\d+)\|'
             tmp = re.search(pattern2, line)
             ref_position = int(tmp.group(2))
             status = True
 
         if "|wt|" in line:
-            pattern2 = r'\|wt\|[^|]*\|(\d*)\|(\d*)'
+            pattern2 = r'\|(\d+)\|(\d+)$'
             tmp = re.search(pattern2, line)
             ref_position = (int(tmp.group(1)), int(tmp.group(2)))
 
