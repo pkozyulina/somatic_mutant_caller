@@ -22,12 +22,12 @@ def twin(read):
 def parse_fastq(input_file, quality):
     for record in SeqIO.parse(input_file, "fastq"):
         if min(record.letter_annotations["phred_quality"]) >= quality:
-            yield record.seq, record.letter_annotations["phred_quality"]
+            yield str(record.seq), record.letter_annotations["phred_quality"], record.id
 
 
 # quantifing distances for norm and mut
-def dist_quant(seq, quality, ref_candidates, reference):
-    read = Read(seq, quality)
+def dist_quant(seq, quality, name, ref_candidates, reference, strand):
+    read = Read(seq, name, quality, strand)
     ref = read.quant_dist_norm(ref_candidates, reference.norm)
     if read.is_correct_pos(reference):
         read.quant_dist_mut(reference.mutant[ref])
@@ -43,32 +43,32 @@ def check_chunk(seq, reference):
     ref_candidate_r, dist_rv = reference.try_ref(twin(chunk))
 
     # choosing a strand of read (forward or revers)
-    if abs(dist_fw) == abs(dist_rv):
-        chunk = seq[idx - int(idx/2):idx + int(idx/2)]
+    if dist_fw == dist_rv:
+        chunk = seq
         ref_candidate, dist_fw = reference.try_ref(chunk)
         ref_candidate_r, dist_rv = reference.try_ref(twin(chunk))
 
-    if abs(dist_fw) < abs(dist_rv):
+    if dist_fw < dist_rv:
         return ref_candidate_r, 1
 
-    return ref_candidate, 0 # here we roughly decide which reference read alignes to
+    return ref_candidate, 0  # here we roughly decide which reference read aligns to
 
 
 
 # here we will have a dict with gene names and how many reads aligns to norm and mutant form
-def build_alignment(input_file, reference, qual):
+def build_alignment(input_files, reference, qual):
 
     gene_list = collections.defaultdict(list)
+    for file in input_files:
+        for seq, quality, name in tqdm(parse_fastq(file, qual)):
+            ref_candidate, strand = check_chunk(seq, reference)
+            if strand:
+                ref, read = dist_quant(twin(seq), quality, name, ref_candidate, reference, 1)  # getting an actual reference mapped
+            else:
+                ref, read = dist_quant(seq, quality,  name, ref_candidate, reference, 0)
 
-    for seq, quality in tqdm(parse_fastq(input_file, qual)):
-        ref_candidate, strand = check_chunk(seq, reference)
-        if strand:
-            ref, read = dist_quant(twin(seq), quality, ref_candidate, reference)         # getting an actual reference mapped
-        else:
-            ref, read = dist_quant(seq, quality, ref_candidate, reference)
-
-        if ref:
-            gene_list[ref].append(read)
+            if ref:
+                gene_list[ref].append(read)
 
     return gene_list  # returns a dict with all contigs as keys and a list of aligned reads to each contig
 
@@ -128,14 +128,14 @@ def poisson_prob(mu, x):
 
 
 # actually creates all objects and do all stats
-def stats(input_file, ref_file, input_quality):
+def stats(input_files, ref_file, input_quality):
 
     # create reference
     reference = Reference()
     reference.parse_reference(ref_file)
 
     # reading file and bulding a dict with all the distances
-    align = build_alignment(input_file, reference, input_quality)
+    align = build_alignment(input_files, reference, input_quality)
     mutant_vs_norm_dict = collections.defaultdict(list)
 
     for ref, reads in align.items():
@@ -154,16 +154,17 @@ def main():
 
     # parsing command line arguments
     parser = argparse.ArgumentParser(description='Clinically relevant somatic mutations caller tool')
-    parser.add_argument('-i', '--input', help='Input fastq file', metavar='File', type=argparse.FileType(),
+    parser.add_argument('-i', '--input', help='Input fastq file', metavar='File', type=argparse.FileType(), nargs='+',
                         required=True)
     parser.add_argument('-r', '--reference', help='Amplicon reference in fasta-format for both normal and mutant forms',
                         metavar='File',
                         type=argparse.FileType(), required=True)
     parser.add_argument('-q', '--quality', help='Quality filtering (default: 30)', metavar='Int', type=int,
                         default=30)
-    parser.add_argument('-o', '--output', help='Output vcf', metavar='File', type=argparse.FileType('w'),
+    parser.add_argument('-o', '--output', help='Two output table names: for reads and probablities', metavar='File', type=argparse.FileType('w'), nargs=2,
                         required=True)
     args = parser.parse_args()
+
 
 
     # here we invoke all the functions needed
@@ -171,7 +172,7 @@ def main():
 
 
     # writing a table with Alignment scores to norm and mut references per read
-    with open(args.output.name, 'w') as outpa:
+    with open(args.output[0].name, 'w') as outpa:
         i = 0
         outpa.write('Read\tAligned to\tNorm dist\tMut\tMut dist\tis mutant?\n')
         for key, values in align.items():
@@ -186,11 +187,11 @@ def main():
                 for mut, _ in value.possible_mutations:
                     for_print += '%s\t%i\t' % (mut, value.mut[mut][1])
 
-                outpa.write('%i\t%s\t%i\t%s\t%s\n' % (i, value.norm[0], value.norm[2], for_print, mutant))
+                outpa.write('%i\t%i\t%s\t%i\t%s\t%s\n' % (i, value.strand, value.norm[0], value.norm[2], for_print, mutant))
 
 
     # writing a table with Poisson probability for mutations
-    with open("4005_probability_table.tsv", 'w') as outpb:
+    with open(args.output[1].name, 'w') as outpb:
         i = 0
         outpb.write('N\tMutation\tMut counts\tSum counts\tProbability\n')
         for key, values in mutant_vs_norm_dict.items():

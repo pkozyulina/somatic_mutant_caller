@@ -6,8 +6,9 @@ from levenshtein import get_score
 
 class Read:
 
-    def __init__(self, seq, quality):
+    def __init__(self, seq, name, quality, strand):
         self.seq = seq
+        self.name = name
         self.norm = []  # self.norm[0] - name of a ref contig that read has aligned to
                         # self.norm[1] - relative position on the reference
                         # self.norm[2] - alignment score
@@ -15,7 +16,7 @@ class Read:
         self.quality = quality
         self.coordinates = None  # global coordinates of the read
         self.possible_mutations = []  # list of tuples: (mutations that are covered by read, positions of the mutations)
-
+        self.strand = strand  # 0 - forward strand, 1 - reverse strand
 
     def quant_dist_norm(self, ref_candidates, ref_dict):
         min_dist = -1000000000
@@ -26,8 +27,8 @@ class Read:
             ref_candidates = ref_dict
 
         for ref in ref_candidates:
-            pos, dist = alignment(self.seq, ref_dict[ref][0])
-            if abs(dist) < abs(min_dist):
+            pos, dist = alignment(self.seq, ref_dict[ref][0], self.name)
+            if dist > min_dist:
                 min_dist = dist
                 ref_min = ref
                 pos_min = pos
@@ -39,12 +40,12 @@ class Read:
 
     def quant_dist_mut(self, ref_dict):
         for mutation, _ in self.possible_mutations:
-            self.mut[mutation] = alignment(self.seq, ref_dict[mutation][0])
+            self.mut[mutation] = alignment(self.seq, ref_dict[mutation][0], self.name)
 
 
     def is_mut(self):
         for mutation, _ in self.possible_mutations:
-            if abs(self.mut[mutation][1]) < abs(self.norm[2]):
+            if self.mut[mutation][1] > self.norm[2]:
                 return mutation
         return None
 
@@ -64,15 +65,19 @@ class Read:
 
     # check if read overlaps any of mutations
     def is_correct_pos(self, reference):
+        print('\n>>>>>>>>>>>>>>>>>>>>>>\n', 'READ: ', self.name, "\nSTRAND: ", self.strand)
         self.set_coordinates(reference)
 
         for mutation, pos in reference.position_mut(self.norm[0]):
+            print(mutation)
             if pos > self.coordinates[0] and pos < self.coordinates[1]:
                 self.possible_mutations.append((mutation, pos))
 
+        print(self.coordinates)
         if self.possible_mutations:
+            print('in position!!!!')
             return True
-
+        print('Not in position')
         return False
 
 
@@ -126,21 +131,21 @@ class Reference:
     # looking for a suitable candidates to map to
     def try_ref(self, chunk):
 
-        dist_min = 999999
+        dist_max = -999999
         dist_all = []
-        all_min = []
+        all_max = []
 
         for ref in self.norm:
-            dist = get_score(chunk, self.norm[ref][0])
+            dist = get_score(chunk, self.norm[ref][0], chunk)
             dist_all.append((ref, dist))
-            if abs(dist) < abs(dist_min):
-                dist_min = dist
+            if dist > dist_max:
+                dist_max = dist
 
         for ref, dist in dist_all:
-            if dist == dist_min:
-                all_min.append(ref)
-
-        return all_min, dist_min
+            if dist == dist_max:
+                all_max.append(ref)
+        print(chunk, '\n', dist_all, dist_max)
+        return all_max, dist_max
 
 
     def position_norm(self, ref_name):
