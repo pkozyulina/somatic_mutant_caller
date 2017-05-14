@@ -42,6 +42,13 @@ def check_chunk(seq, reference):
     ref_candidate, dist_fw = reference.try_ref(chunk)
     ref_candidate_r, dist_rv = reference.try_ref(twin(chunk))
 
+    score_threshold = int(len(chunk)*0.6)
+
+    #print(chunk, '\n', ref_candidate, '\n', ref_candidate_r, '\n', dist_fw, dist_rv, score_threshold)
+
+    if dist_rv < score_threshold and dist_fw < score_threshold:
+        return None, None
+
     # choosing a strand of read (forward or revers)
     if dist_fw == dist_rv:
         chunk = seq
@@ -62,13 +69,14 @@ def build_alignment(input_files, reference, qual):
     for file in input_files:
         for seq, quality, name in tqdm(parse_fastq(file, qual)):
             ref_candidate, strand = check_chunk(seq, reference)
-            if strand:
-                ref, read = dist_quant(twin(seq), quality, name, ref_candidate, reference, 1)  # getting an actual reference mapped
-            else:
-                ref, read = dist_quant(seq, quality,  name, ref_candidate, reference, 0)
+            if ref_candidate:
+                if strand:
+                    ref, read = dist_quant(twin(seq), quality, name, ref_candidate, reference, 1)  # getting an actual reference mapped
+                else:
+                    ref, read = dist_quant(seq, quality,  name, ref_candidate, reference, 0)
 
-            if ref:
-                gene_list[ref].append(read)
+                if ref:
+                    gene_list[ref].append(read)
 
     return gene_list  # returns a dict with all contigs as keys and a list of aligned reads to each contig
 
@@ -120,13 +128,11 @@ def mut_vs_norm(reads, ref, reference):
     return mu, x
 
 
-def poisson_prob(mu, x):
-    return 1 - poisson.cdf(k=x, mu=mu)  # calculating cumulative distribution function (probability)
+def poisson_prob(mu, x, n, m):  ## n = length of reference allele, m = length of mutant allele
+    return ((1 - poisson.cdf(k=x, mu=mu))**n)/(4**m - 1)  # calculating cumulative distribution function (probability)
 
 
-    # running the stats
-
-
+# running the stats
 # actually creates all objects and do all stats
 def stats(input_files, ref_file, input_quality):
 
@@ -143,7 +149,8 @@ def stats(input_files, ref_file, input_quality):
 
         for mutant in x:
             if mutant != ref:
-                prob = poisson_prob(mu[mutant], x[mutant])
+                n, m = reference.mutation_length(ref, mutant)
+                prob = poisson_prob(mu[mutant], x[mutant], n, m)
                 mutant_vs_norm_dict[mutant] = [x[mutant], sum(x.values()), prob]
                 # mutation, mutation counts (number of reads), sum counts for the reference
 
@@ -161,7 +168,7 @@ def main():
                         type=argparse.FileType(), required=True)
     parser.add_argument('-q', '--quality', help='Quality filtering (default: 30)', metavar='Int', type=int,
                         default=30)
-    parser.add_argument('-o', '--output', help='Two output table names: for reads and probablities', metavar='File', type=argparse.FileType('w'), nargs=2,
+    parser.add_argument('-o', '--output', help='Two output names: for table with reads and table with probablities', metavar='File', type=argparse.FileType('w'), nargs=2,
                         required=True)
     args = parser.parse_args()
 
@@ -174,7 +181,7 @@ def main():
     # writing a table with Alignment scores to norm and mut references per read
     with open(args.output[0].name, 'w') as outpa:
         i = 0
-        outpa.write('Read\tAligned to\tNorm dist\tMut\tMut dist\tis mutant?\n')
+        outpa.write('Read\tStrand\tAligned to\tNorm dist\tMut\tMut dist\tis mutant?\n')
         for key, values in align.items():
             for value in values:
                 i += 1

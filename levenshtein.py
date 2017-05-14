@@ -13,7 +13,7 @@ def aln(str1, str2, read_name):
             file.write(format_alignment(*a))
     for letter in align[0][0]:
         if letter != '-':
-            return cnt, int(align[0][2]) # - len(str1)
+            return cnt, int(align[0][2])
         cnt += 1
 
 def alignment(str1, str2, read_name):
@@ -37,7 +37,7 @@ def get_score(str1, str2, read_name):
 def main(str1, str2):
     aln = alignment(str1, str2)
     print(aln)
-    #print(aln[10])
+
 
 from Bio.pairwise2 import format_alignment
 

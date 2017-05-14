@@ -8,7 +8,7 @@ class Read:
 
     def __init__(self, seq, name, quality, strand):
         self.seq = seq
-        self.name = name
+        self.name = name  # name of the read
         self.norm = []  # self.norm[0] - name of a ref contig that read has aligned to
                         # self.norm[1] - relative position on the reference
                         # self.norm[2] - alignment score
@@ -52,7 +52,14 @@ class Read:
 
     def calc_delta(self, mut_pos_global):
         delta_start = mut_pos_global - self.coordinates[0]
-        delta_qual = self.quality[delta_start - 5:delta_start + 5]
+
+        if delta_start >= 5 and delta_start <= len(self.seq) - 5:
+            delta_qual = self.quality[delta_start - 5:delta_start + 5]
+        elif delta_start < 5:
+            delta_qual = self.quality[0:delta_start + 5]
+        elif delta_start > len(self.seq) - 5:
+            delta_qual = self.quality[delta_start - 5:]
+
         return sum(delta_qual)/len(delta_qual)
 
 
@@ -65,19 +72,17 @@ class Read:
 
     # check if read overlaps any of mutations
     def is_correct_pos(self, reference):
-        print('\n>>>>>>>>>>>>>>>>>>>>>>\n', 'READ: ', self.name, "\nSTRAND: ", self.strand)
+
         self.set_coordinates(reference)
 
         for mutation, pos in reference.position_mut(self.norm[0]):
-            print(mutation)
-            if pos > self.coordinates[0] and pos < self.coordinates[1]:
+
+            if pos >= self.coordinates[0] and pos <= self.coordinates[1]:
                 self.possible_mutations.append((mutation, pos))
 
-        print(self.coordinates)
         if self.possible_mutations:
-            print('in position!!!!')
             return True
-        print('Not in position')
+
         return False
 
 
@@ -97,8 +102,11 @@ class Reference:
         self.norm = collections.defaultdict(tuple) # key = reference name; value = (reference sequence,
                                                    # reference global position), where reference global position is a tuple
         self.mutant = collections.defaultdict(dict) # key = reference name; value = {}, where key = mutation, value =
-                                                    # (reference sequence, reference global position), where reference global position is a tuple
+                                                    # (reference sequence, reference global position, allele lengths ),
+                                                    # where allele lengths is a tuple
 
+
+    # getting global coordinates of each reference
     def get_position(self, line):
         pattern1 = r'([^|]*)'
         ref_name = (re.match(pattern1, line)).group(1)
@@ -118,12 +126,33 @@ class Reference:
         return status, ref_name, ref_position
 
 
+    # adding length of normal and mutant alleles
+    def allele_length(self, line):
+
+        pattern = r'\|([a-zA-Z-]+)\|([a-zA-Z-]+)$'
+        tmp = re.search(pattern, line)
+
+        norm_len = len(tmp.group(1))
+        mut_len = len(tmp.group(2))
+
+        if tmp.group(1) == "-":
+            mut_len += 1
+        if tmp.group(2) == "-":
+            norm_len += 1
+
+        return (norm_len, mut_len)
+
+
+    # parsing reference file
     def parse_reference(self, ref_file):
         for rec in SeqIO.parse(ref_file, "fasta"):
             line = rec.id
             status, ref_name, ref_position = self.get_position(line)
+
             if status:
-                self.mutant[ref_name][rec.id] = (rec.seq, ref_position)
+                alleles_len = self.allele_length(line)
+                self.mutant[ref_name][rec.id] = (rec.seq, ref_position, alleles_len)
+
             else:
                 self.norm[ref_name] = (rec.seq, ref_position)
 
@@ -144,14 +173,21 @@ class Reference:
         for ref, dist in dist_all:
             if dist == dist_max:
                 all_max.append(ref)
-        print(chunk, '\n', dist_all, dist_max)
+
         return all_max, dist_max
 
 
+    # global coordinates of normal "gene"
     def position_norm(self, ref_name):
         return [self.norm[ref_name][1][0], self.norm[ref_name][1][1]]
 
 
+    # global coordinate of mutation
     def position_mut(self, ref_name):
         for key, value in self.mutant[ref_name].items():
             yield key, value[1]
+
+    # calculating mutant allele length for probability quantification
+    def mutation_length(self, ref_name, mutant):
+        n, m = self.mutant[ref_name][mutant][2]
+        return n, m
