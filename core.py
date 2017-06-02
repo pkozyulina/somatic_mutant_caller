@@ -44,17 +44,16 @@ def check_chunk(seq, reference):
 
     score_threshold = int(len(chunk)*0.6)
 
-    #print(chunk, '\n', ref_candidate, '\n', ref_candidate_r, '\n', dist_fw, dist_rv, score_threshold)
-
     if dist_rv < score_threshold and dist_fw < score_threshold:
         return None, None
 
     # choosing a strand of read (forward or revers)
+    '''
     if dist_fw == dist_rv:
         chunk = seq
         ref_candidate, dist_fw = reference.try_ref(chunk)
         ref_candidate_r, dist_rv = reference.try_ref(twin(chunk))
-
+    '''
     if dist_fw < dist_rv:
         return ref_candidate_r, 1
 
@@ -180,21 +179,15 @@ def main():
 
     # writing a table with Alignment scores to norm and mut references per read
     with open(args.output[0].name, 'w') as outpa:
-        i = 0
         outpa.write('Read\tStrand\tAligned to\tNorm dist\tMut\tMut dist\tis mutant?\n')
         for key, values in align.items():
             for value in values:
-                i += 1
-                for_print = ''
                 mutant = value.is_mut()
 
                 if not mutant:
                     mutant = "Norm"
 
-                for mut, _ in value.possible_mutations:
-                    for_print += '%s\t%i\t' % (mut, value.mut[mut][1])
-
-                outpa.write('%i\t%i\t%s\t%i\t%s\t%s\n' % (i, value.strand, value.norm[0], value.norm[2], for_print, mutant))
+                outpa.write('%s\t%s\n' % (value.print_all(), mutant))
 
 
     # writing a table with Poisson probability for mutations

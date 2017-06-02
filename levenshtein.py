@@ -6,11 +6,13 @@ from Bio.pairwise2 import format_alignment
 def aln(str1, str2, read_name):
     align = pairwise2.align.localms(str1, str2, 2, -1, -1, -0.5)
     cnt = 0
+    '''
     with open("Alignments.aln", 'a+') as file:
         file.write(read_name)
         file.write("\n")
         for a in align:
             file.write(format_alignment(*a))
+    '''
     for letter in align[0][0]:
         if letter != '-':
             return cnt, int(align[0][2])
@@ -23,14 +25,16 @@ def alignment(str1, str2, read_name):
 
 
 def get_score(str1, str2, read_name):
+    '''
     aln = pairwise2.align.localms(str1, str2, 1, -1, -2, -0.5)
+    
     with open("chunks.aln", 'a+') as outp:
         outp.write(read_name)
         outp.write("\n")
         for a in aln:
             outp.write(format_alignment(*a))
-
-    return  aln[0][2] #int(pairwise2.align.localms(str1, str2, 1, -1, -2, -1, score_only=True))
+    '''
+    return  int(pairwise2.align.localms(str1, str2, 1, -1, -2, -0.5, score_only=True)) #aln[0][2] #int(pairwise2.align.localms(str1, str2, 1, -1, -2, -0.5, score_only=True))
 
 
 

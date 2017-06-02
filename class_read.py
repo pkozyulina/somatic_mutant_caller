@@ -23,8 +23,10 @@ class Read:
         ref_min = ''
         pos_min = None
 
+        '''
         if not ref_candidates:
             ref_candidates = ref_dict
+        '''
 
         for ref in ref_candidates:
             pos, dist = alignment(self.seq, ref_dict[ref][0], self.name)
@@ -85,6 +87,14 @@ class Read:
 
         return False
 
+    def print_mutants(self):
+        for_print = ''
+        for mut, _ in self.possible_mutations:
+            for_print += '%s\t%i\t' % (mut, self.mut[mut][1])
+        return for_print
+
+    def print_all(self):
+        return '%s\t%i\t%s\t%i\t%s\t' % (self.name, self.strand, self.norm[0], self.norm[2], self.print_mutants())
 
     def __str__(self):
         return str(self.seq)
